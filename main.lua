@@ -3944,6 +3944,16 @@ function library:dropdown(properties)
 		icon.Text = bool and "-" or "+"
 		icon.TextSize = bool and 12 or 8
 
+		if bool then
+			content_inline.Position = UDim2.new(
+				0,
+				dropdown_inline.AbsolutePosition.X,
+				0,
+				dropdown_inline.AbsolutePosition.Y + dropdown_inline.AbsoluteSize.Y + 2
+			)
+			content_inline.Size = UDim2.new(0, dropdown_inline.AbsoluteSize.X, 0, optionsHeight + 4)
+		end
+
 		if cfg.name then
 			object.ZIndex = bool and 9999 or 3
 		end

@@ -51,7 +51,6 @@ local library = {
 	sin = 0,
 	keybind_path  = nil,
 	panel_open = false,
-	active_slider = nil,
 	active_colorpicker = nil,
 	active_drag = nil,
 	active_resize = nil,
@@ -475,11 +474,6 @@ library:connection(uis.InputChanged, function(input)
 		)
 	end
 
-	local active_slider = library.active_slider
-	if active_slider then
-		active_slider:update_from_input(input)
-	end
-
 	local active_colorpicker = library.active_colorpicker
 	if active_colorpicker then
 		active_colorpicker:update_color()
@@ -490,12 +484,6 @@ library:connection(uis.InputEnded, function(input)
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 		return
 	end
-
-	local active_slider = library.active_slider
-	if active_slider then
-		active_slider.dragging = false
-	end
-	library.active_slider = nil
 
 	library.active_drag = nil
 	library.active_resize = nil
@@ -3683,20 +3671,26 @@ function library:slider(properties)
 		cfg.callback(flags[cfg.flag])
 	end
 
-	function cfg.update_from_input(input)
-		if not cfg.dragging then
-			return
+	library:connection(uis.InputChanged, function(input)
+		if cfg.dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			local size_x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+			local value = ((cfg.max - cfg.min) * size_x) + cfg.min
+			cfg.set(value)
 		end
+	end)
 
-		local size_x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
-		local value = ((cfg.max - cfg.min) * size_x) + cfg.min
-		cfg.set(value)
-	end
+	library:connection(uis.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			cfg.dragging = false
+		end
+	end)
 
 	slider_inline.MouseButton1Down:Connect(function()
 		cfg.dragging = true
-		library.active_slider = cfg
-		cfg.update_from_input({ Position = vec2(mouse.X, mouse.Y) })
+		local current_mouse = vec2(mouse.X, mouse.Y)
+		local size_x = (current_mouse.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+		local value = ((cfg.max - cfg.min) * size_x) + cfg.min
+		cfg.set(value)
 	end)
 
 	add.MouseButton1Down:Connect(function()
@@ -5548,3 +5542,4 @@ function library:panel(properties)
 end
 
 return library
+

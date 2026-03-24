@@ -283,6 +283,40 @@ function library:make_resizable(frame)
 	end)
 end
 
+function library:make_draggable(frame)
+	local dragging = false
+	local drag_start
+	local start_position
+
+	frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			drag_start = input.Position
+			start_position = frame.Position
+		end
+	end)
+
+	library:connection(uis.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	library:connection(uis.InputChanged, function(input)
+		if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then
+			return
+		end
+
+		local delta = input.Position - drag_start
+		frame.Position = dim2(
+			start_position.X.Scale,
+			start_position.X.Offset + delta.X,
+			start_position.Y.Scale,
+			start_position.Y.Offset + delta.Y
+		)
+	end)
+end
+
 function library:new_item(class, properties)
 	local ins = Instance.new(class)
 
@@ -446,11 +480,12 @@ function library:window(properties)
 		Parent = __holder,
 		Name = "",
 		Active = true,
-		Draggable = true,
+		Draggable = false,
 		BorderColor3 = Color3.fromRGB(0, 0, 0),
 		Size = UDim2.new(0, ((#animated_text / 2) * 5) + 13, 0, 40),
 		BackgroundColor3 = Color3.fromRGB(40, 40, 40),
 	})
+	library:make_draggable(inline1)
 
 	local accent_line = library:create("Frame", {
 		Parent = inline1,
@@ -592,7 +627,7 @@ function library:window(properties)
 		Parent = library.gui,
 		Name = "",
 		Active = true,
-		Draggable = true,
+		Draggable = false,
 		Position = UDim2.new(0.5, -cfg.size.X.Offset / 2, 0.5, -cfg.size.Y.Offset / 2),
 		BorderColor3 = Color3.fromRGB(8, 8, 8),
 		ZIndex = 2,
@@ -601,6 +636,7 @@ function library:window(properties)
 	})
 	table.insert(library.main_frame, inline1)
 	local WINDOW_PATH = inline1
+	library:make_draggable(inline1)
 	library:make_resizable(inline1)
 
 	local inline2 = library:create("Frame", {
@@ -770,7 +806,7 @@ function library:window(properties)
 		Name = "",
 		Visible = false,
 		Active = true,
-		Draggable = true,
+		Draggable = false,
 		Position = UDim2.new(
 			0,
 			inline1.AbsolutePosition.X + inline1.AbsoluteSize.X + 8,
@@ -781,6 +817,7 @@ function library:window(properties)
 		Size = UDim2.new(0, 328, 0, 376),
 		BackgroundColor3 = Color3.fromRGB(56, 56, 56),
 	})
+	library:make_draggable(esp_preview)
 	library:make_resizable(esp_preview)
 
 	local name = library:create("TextLabel", {
@@ -1491,13 +1528,14 @@ function library:window(properties)
 		Parent = library.gui,
 		Name = "",
 		Active = true,
-		Draggable = true,
+		Draggable = false,
 		AnchorPoint = Vector2.new(0, 0),
 		Position = UDim2.new(0, inline1.AbsolutePosition.X - 358 - 8, 0, inline1.AbsolutePosition.Y + 1),
 		BorderColor3 = Color3.fromRGB(8, 8, 8),
 		Size = UDim2.new(0, 358, 0, 328),
 		BackgroundColor3 = Color3.fromRGB(56, 56, 56),
 	})
+	library:make_draggable(playerlist)
 	library:make_resizable(playerlist)
 
 	table.insert(library.main_frame, playerlist)
@@ -2101,10 +2139,11 @@ function library:window(properties)
 		Position = UDim2.new(0, 20, 0.5, 0),
 		ZIndex = 2,
 		Active = true,
-		Draggable = true,
+		Draggable = false,
 		AutomaticSize = Enum.AutomaticSize.XY,
 		BackgroundColor3 = Color3.fromRGB(40, 40, 40),
 	})
+	library:make_draggable(old_kblist)
 
 	local glow = library:create("ImageLabel", {
 		Parent = old_kblist,

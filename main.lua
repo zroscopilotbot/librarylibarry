@@ -51,6 +51,8 @@ local library = {
 	sin = 0,
 	keybind_path  = nil,
 	panel_open = false,
+	active_slider = nil,
+	active_colorpicker = nil,
 
 	directory = "inactivity",
 	folders = {
@@ -454,6 +456,40 @@ library.gui = library:create("ScreenGui", {
 	DisplayOrder = 2,
 	ZIndexBehavior = 1,
 })
+
+library:connection(uis.InputChanged, function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+		return
+	end
+
+	local active_slider = library.active_slider
+	if active_slider then
+		active_slider:update_from_input(input)
+	end
+
+	local active_colorpicker = library.active_colorpicker
+	if active_colorpicker then
+		active_colorpicker:update_color()
+	end
+end)
+
+library:connection(uis.InputEnded, function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+
+	local active_slider = library.active_slider
+	if active_slider then
+		active_slider.dragging = false
+	end
+	library.active_slider = nil
+
+	local active_colorpicker = library.active_colorpicker
+	if active_colorpicker then
+		active_colorpicker.stop_dragging()
+		library.active_colorpicker = nil
+	end
+end)
 
 -- library functions
 function library:window(properties)
@@ -3629,22 +3665,20 @@ function library:slider(properties)
 		cfg.callback(flags[cfg.flag])
 	end
 
-	library:connection(uis.InputChanged, function(input)
-		if cfg.dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-			local size_x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
-			local value = ((cfg.max - cfg.min) * size_x) + cfg.min
-			cfg.set(value)
+	function cfg.update_from_input(input)
+		if not cfg.dragging then
+			return
 		end
-	end)
 
-	library:connection(uis.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			cfg.dragging = false
-		end
-	end)
+		local size_x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+		local value = ((cfg.max - cfg.min) * size_x) + cfg.min
+		cfg.set(value)
+	end
 
 	slider_inline.MouseButton1Down:Connect(function()
 		cfg.dragging = true
+		library.active_slider = cfg
+		cfg.update_from_input({ Position = vec2(mouse.X, mouse.Y) })
 	end)
 
 	add.MouseButton1Down:Connect(function()
@@ -3807,6 +3841,10 @@ function library:dropdown(properties)
 	})
 
 	dropdown_inline:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+		if not content_inline.Visible then
+			return
+		end
+
 		content_inline.Position = UDim2.new(
 			0,
 			dropdown_inline.AbsolutePosition.X,
@@ -3816,6 +3854,10 @@ function library:dropdown(properties)
 	end)
 
 	dropdown_inline:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		if not content_inline.Visible then
+			return
+		end
+
 		content_inline.Size = UDim2.new(0, dropdown_inline.AbsoluteSize.X, 0, optionsHeight + 4)
 	end)
 
@@ -4638,16 +4680,28 @@ function library:colorpicker(properties)
 		cfg.set(nil, nil)
 	end
 
+	function cfg.stop_dragging()
+		dragging_sat = false
+		dragging_hue = false
+		dragging_alpha = false
+	end
+
 	alpha_inline.MouseButton1Down:Connect(function()
 		dragging_alpha = true
+		library.active_colorpicker = cfg
+		cfg.update_color()
 	end)
 
 	hue_inline.MouseButton1Down:Connect(function()
 		dragging_hue = true
+		library.active_colorpicker = cfg
+		cfg.update_color()
 	end)
 
 	sat_inline.MouseButton1Down:Connect(function()
 		dragging_sat = true
+		library.active_colorpicker = cfg
+		cfg.update_color()
 	end)
 
 	cfg.saved_color = Color3.fromHSV(h, s, v)
@@ -4683,21 +4737,6 @@ function library:colorpicker(properties)
 	normal.MouseButton1Down:Connect(function()
 		selectMode(normal, "normal")
 		cfg.set(cfg.saved_color or Color3.fromHSV(base_h, base_s, base_v), a)
-	end)
-
-	library:connection(uis.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			dragging_sat = false
-			dragging_hue = false
-			dragging_alpha = false
-		end
-	end)
-
-	library:connection(uis.InputChanged, function(input)
-		if (dragging_sat or dragging_hue or dragging_alpha)
-			and input.UserInputType == Enum.UserInputType.MouseMovement then
-			cfg.update_color()
-		end
 	end)
 
 	cfg.set(cfg.color, cfg.alpha)
@@ -4826,6 +4865,10 @@ function library:keybind(properties)
 	})
 
 	keybind:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+		if not content_inline.Visible then
+			return
+		end
+
 		content_inline.Position = UDim2.new(0, keybind.AbsolutePosition.X, 0, keybind.AbsolutePosition.Y + 15)
 	end)
 

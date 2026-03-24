@@ -6,6 +6,7 @@ local gui_service = game:GetService("GuiService")
 
 local coregui = game.CoreGui
 local tween_service = game:GetService("TweenService")
+local run_service = game:GetService("RunService")
 
 local vec2 = Vector2.new
 local vec3 = Vector3.new
@@ -30,6 +31,9 @@ local max = math.max
 local floor = math.floor
 local min = math.min
 local abs = math.abs
+local clamp = math.clamp
+local sin_wave = math.sin
+local clock = os.clock
 
 -- library init
 local library = {
@@ -268,11 +272,11 @@ function library:make_resizable(frame)
 			local viewport_x = camera.ViewportSize.X
 			local viewport_y = camera.ViewportSize.Y
 
-			current_size = dim2(
+			local current_size = dim2(
 				start_size.X.Scale,
-				math.clamp(start_size.X.Offset + (input.Position.X - start.X), og_size.X.Offset, viewport_x),
+				clamp(start_size.X.Offset + (input.Position.X - start.X), og_size.X.Offset, viewport_x),
 				start_size.Y.Scale,
-				math.clamp(start_size.Y.Offset + (input.Position.Y - start.Y), og_size.Y.Offset, viewport_y)
+				clamp(start_size.Y.Offset + (input.Position.Y - start.Y), og_size.Y.Offset, viewport_y)
 			)
 			frame.Size = current_size
 		end
@@ -561,15 +565,24 @@ function library:window(properties)
 
 	library:apply_theme(glow, "accent", "ImageColor3")
 
-	task.spawn(function()
-		while true do
-			if __holder.Visible then
-				for i = 1, #animated_text do
-					task.wait(0.2)
-					name.Text = animated_text[i]
-				end
-			end
-			task.wait(0.2)
+	local watermark_index = 1
+	local watermark_elapsed = 0
+	library:connection(run_service.Heartbeat, function(dt)
+		if not __holder.Visible or #animated_text == 0 then
+			return
+		end
+
+		watermark_elapsed += dt
+		if watermark_elapsed < 0.2 then
+			return
+		end
+
+		watermark_elapsed = 0
+		name.Text = animated_text[watermark_index]
+		watermark_index += 1
+
+		if watermark_index > #animated_text then
+			watermark_index = 1
 		end
 	end)
 	--
@@ -722,19 +735,32 @@ function library:window(properties)
 		BackgroundColor3 = Color3.fromRGB(40, 40, 40),
 	})
 
-	task.spawn(function()
-		while true do
-			if flags["color_picker_anim_speed"] then
-				library.sin = math.abs(math.sin(tick() * flags["color_picker_anim_speed"]))
-
-				TEXT_ANIMATION_GRADIENT.Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-					ColorSequenceKeypoint.new(math.abs(math.sin(tick())), themes.preset.accent),
-					ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
-				})
-			end
-			task.wait()
+	local header_gradient_elapsed = 0
+	library:connection(run_service.Heartbeat, function(dt)
+		if not __holder.Visible then
+			return
 		end
+
+		local anim_speed = flags["color_picker_anim_speed"]
+		if not anim_speed then
+			return
+		end
+
+		header_gradient_elapsed += dt
+		if header_gradient_elapsed < (1 / 30) then
+			return
+		end
+
+		header_gradient_elapsed = 0
+
+		local now = clock()
+		library.sin = abs(sin_wave(now * anim_speed))
+
+		TEXT_ANIMATION_GRADIENT.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+			ColorSequenceKeypoint.new(abs(sin_wave(now)), themes.preset.accent),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
+		})
 	end)
 	--
 
@@ -2439,6 +2465,17 @@ function library:notification(properties)
 	library:apply_theme(glow, "accent", "ImageColor3")
 	--
 
+	local fade_targets = {
+		{ instance = name, property = "TextTransparency", value = 1 },
+		{ instance = inline1, property = "BackgroundTransparency", value = 1 },
+		{ instance = inline2, property = "BackgroundTransparency", value = 1 },
+		{ instance = main, property = "BackgroundTransparency", value = 1 },
+		{ instance = tab_inline, property = "BackgroundTransparency", value = 1 },
+		{ instance = depth, property = "BackgroundTransparency", value = 1 },
+		{ instance = accent_line, property = "BackgroundTransparency", value = 1 },
+		{ instance = glow, property = "ImageTransparency", value = 1 },
+	}
+
 	task.spawn(function()
 		tween_service
 			:Create(
@@ -2457,32 +2494,16 @@ function library:notification(properties)
 				{ AnchorPoint = Vector2.new(1, 0) }
 			)
 			:Play()
-		for _, v in next, holder:GetDescendants() do
-			if v:IsA("TextLabel") then
-				tween_service
-					:Create(
-						v,
-						TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-						{ TextTransparency = 1 }
-					)
-					:Play()
-			elseif v:IsA("Frame") then
-				tween_service
-					:Create(
-						v,
-						TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-						{ BackgroundTransparency = 1 }
-					)
-					:Play()
-			elseif v:IsA("ImageLabel") then
-				tween_service
-					:Create(
-						v,
-						TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-						{ ImageTransparency = 1 }
-					)
-					:Play()
-			end
+
+		for i = 1, #fade_targets do
+			local target = fade_targets[i]
+			tween_service
+				:Create(
+					target.instance,
+					TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+					{ [target.property] = target.value }
+				)
+				:Play()
 		end
 	end)
 
@@ -4625,7 +4646,7 @@ function library:colorpicker(properties)
 		cfg.set(cfg.saved_color or Color3.fromHSV(base_h, base_s, base_v), a)
 	end)
 
-	uis.InputEnded:Connect(function(input)
+	library:connection(uis.InputEnded, function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging_sat = false
 			dragging_hue = false
@@ -4633,7 +4654,7 @@ function library:colorpicker(properties)
 		end
 	end)
 
-	uis.InputChanged:Connect(function(input)
+	library:connection(uis.InputChanged, function(input)
 		if (dragging_sat or dragging_hue or dragging_alpha)
 			and input.UserInputType == Enum.UserInputType.MouseMovement then
 			cfg.update_color()
@@ -4644,19 +4665,29 @@ function library:colorpicker(properties)
 
 	library.config_flags[cfg.flag] = cfg.set
 
-	task.spawn(function()
-		while true do
-			if selectedMode == "rainbow" then
-				local t = (tick() % 5) / 5
-				cfg.set(Color3.fromHSV(t, 1, 1), a)
-			elseif selectedMode == "fade" then
-				local vOsc = (math.sin(tick()) + 1) / 2
-				cfg.set(Color3.fromHSV(base_h, base_s, vOsc), a)
-			elseif selectedMode == "fade_alpha" then
-				local aOsc = (math.sin(tick()) + 1) / 2
-				cfg.set(cfg.color, aOsc)
-			end
-			task.wait()
+	local picker_animation_elapsed = 0
+	library:connection(run_service.Heartbeat, function(dt)
+		if selectedMode == "normal" then
+			return
+		end
+
+		picker_animation_elapsed += dt
+		if picker_animation_elapsed < (1 / 30) then
+			return
+		end
+
+		picker_animation_elapsed = 0
+
+		local now = clock()
+		if selectedMode == "rainbow" then
+			local t = (now % 5) / 5
+			cfg.set(Color3.fromHSV(t, 1, 1), a)
+		elseif selectedMode == "fade" then
+			local vOsc = (sin_wave(now) + 1) / 2
+			cfg.set(Color3.fromHSV(base_h, base_s, vOsc), a)
+		elseif selectedMode == "fade_alpha" then
+			local aOsc = (sin_wave(now) + 1) / 2
+			cfg.set(cfg.color, aOsc)
 		end
 	end)
 

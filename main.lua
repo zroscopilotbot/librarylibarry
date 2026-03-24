@@ -53,6 +53,8 @@ local library = {
 	panel_open = false,
 	active_slider = nil,
 	active_colorpicker = nil,
+	active_drag = nil,
+	active_resize = nil,
 
 	directory = "inactivity",
 	folders = {
@@ -259,28 +261,21 @@ function library:make_resizable(frame)
 			resizing = true
 			start = input.Position
 			start_size = frame.Size
+			library.active_resize = {
+				frame = frame,
+				start = start,
+				start_size = start_size,
+				og_size = og_size,
+			}
 		end
 	end)
 
-	Frame.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	library:connection(uis.InputEnded, function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 and resizing then
 			resizing = false
-		end
-	end)
-
-	library:connection(uis.InputChanged, function(input, game_event)
-		if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
-			local mouse_pos = vec2(mouse.X, mouse.Y)
-			local viewport_x = camera.ViewportSize.X
-			local viewport_y = camera.ViewportSize.Y
-
-			local current_size = dim2(
-				start_size.X.Scale,
-				clamp(start_size.X.Offset + (input.Position.X - start.X), og_size.X.Offset, viewport_x),
-				start_size.Y.Scale,
-				clamp(start_size.Y.Offset + (input.Position.Y - start.Y), og_size.Y.Offset, viewport_y)
-			)
-			frame.Size = current_size
+			if library.active_resize and library.active_resize.frame == frame then
+				library.active_resize = nil
+			end
 		end
 	end)
 end
@@ -295,27 +290,21 @@ function library:make_draggable(frame)
 			dragging = true
 			drag_start = input.Position
 			start_position = frame.Position
+			library.active_drag = {
+				frame = frame,
+				drag_start = drag_start,
+				start_position = start_position,
+			}
 		end
 	end)
 
 	library:connection(uis.InputEnded, function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 and dragging then
 			dragging = false
+			if library.active_drag and library.active_drag.frame == frame then
+				library.active_drag = nil
+			end
 		end
-	end)
-
-	library:connection(uis.InputChanged, function(input)
-		if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then
-			return
-		end
-
-		local delta = input.Position - drag_start
-		frame.Position = dim2(
-			start_position.X.Scale,
-			start_position.X.Offset + delta.X,
-			start_position.Y.Scale,
-			start_position.Y.Offset + delta.Y
-		)
 	end)
 end
 
@@ -430,14 +419,6 @@ function library:update_theme(theme, color)
 	themes.preset[theme] = color
 end
 
-function library:connection(signal, callback)
-	local connection = signal:Connect(callback)
-
-	table.insert(library.connections, connection)
-
-	return connection
-end
-
 function library:create(instance, options)
 	local ins = Instance.new(instance)
 
@@ -462,6 +443,38 @@ library:connection(uis.InputChanged, function(input)
 		return
 	end
 
+	local active_drag = library.active_drag
+	if active_drag then
+		local delta = input.Position - active_drag.drag_start
+		active_drag.frame.Position = dim2(
+			active_drag.start_position.X.Scale,
+			active_drag.start_position.X.Offset + delta.X,
+			active_drag.start_position.Y.Scale,
+			active_drag.start_position.Y.Offset + delta.Y
+		)
+	end
+
+	local active_resize = library.active_resize
+	if active_resize then
+		local viewport_x = camera.ViewportSize.X
+		local viewport_y = camera.ViewportSize.Y
+
+		active_resize.frame.Size = dim2(
+			active_resize.start_size.X.Scale,
+			clamp(
+				active_resize.start_size.X.Offset + (input.Position.X - active_resize.start.X),
+				active_resize.og_size.X.Offset,
+				viewport_x
+			),
+			active_resize.start_size.Y.Scale,
+			clamp(
+				active_resize.start_size.Y.Offset + (input.Position.Y - active_resize.start.Y),
+				active_resize.og_size.Y.Offset,
+				viewport_y
+			)
+		)
+	end
+
 	local active_slider = library.active_slider
 	if active_slider then
 		active_slider:update_from_input(input)
@@ -483,6 +496,9 @@ library:connection(uis.InputEnded, function(input)
 		active_slider.dragging = false
 	end
 	library.active_slider = nil
+
+	library.active_drag = nil
+	library.active_resize = nil
 
 	local active_colorpicker = library.active_colorpicker
 	if active_colorpicker then
@@ -994,7 +1010,9 @@ function library:window(properties)
 
 	local glow_patterns = {}
 
-	for _, v in next, hitpart:GetChildren() do
+	local hitpart_children = hitpart:GetChildren()
+
+	for _, v in next, hitpart_children do
 		local glow = library:create("ImageLabel", {
 			Parent = v,
 			Name = "",
@@ -1023,7 +1041,7 @@ function library:window(properties)
 			glow.Visible = bool
 		end
 
-		for _, part in next, hitpart:GetChildren() do
+		for _, part in next, hitpart_children do
 			part.BackgroundColor3 = bool and themes.preset.accent or Color3.fromRGB(38, 38, 38)
 		end
 	end
@@ -4055,8 +4073,6 @@ function library:dropdown(properties)
 end
 
 function library:colorpicker(properties)
-	local inset = game:GetService("GuiService"):GetGuiInset()
-
 	local cfg = {
 		name = properties.name or nil,
 		flag = properties.flag or tostring(2 ^ 789),
@@ -4658,23 +4674,22 @@ function library:colorpicker(properties)
 
 	function cfg.update_color()
 		local mouse = uis:GetMouseLocation()
-		local inset = game:GetService("GuiService"):GetGuiInset()
-		mouse = Vector2.new(mouse.X, mouse.Y - inset.Y)
+		mouse = Vector2.new(mouse.X, mouse.Y - gui_offset)
 
 		if dragging_sat then
 			local rel = (mouse - sat_white.AbsolutePosition)
-			s = math.clamp(rel.X / sat_white.AbsoluteSize.X, 0, 1)
-			v = 1 - math.clamp(rel.Y / sat_white.AbsoluteSize.Y, 0, 1)
+			s = clamp(rel.X / sat_white.AbsoluteSize.X, 0, 1)
+			v = 1 - clamp(rel.Y / sat_white.AbsoluteSize.Y, 0, 1)
 		end
 
 		if dragging_hue then
 			local rel = mouse.X - hue.AbsolutePosition.X
-			h = math.clamp(rel / hue.AbsoluteSize.X, 0, 1)
+			h = clamp(rel / hue.AbsoluteSize.X, 0, 1)
 		end
 
 		if dragging_alpha then
 			local rel = mouse.X - alpha.AbsolutePosition.X
-			a = math.clamp(rel / alpha.AbsoluteSize.X, 0, 1)
+			a = clamp(rel / alpha.AbsoluteSize.X, 0, 1)
 		end
 
 		cfg.set(nil, nil)

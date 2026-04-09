@@ -5113,15 +5113,11 @@ function library:keybind(properties)
 	end
 
 	local selected
+	local toggled = cfg.active or false -- local per-keybind toggle state
 
 	hold.MouseButton1Click:Connect(function()
-		if selected then
-			selected.BackgroundTransparency = 1
-		end
-		selected = hold
-		hold.BackgroundTransparency = 0
-
 		cfg.set_mode("hold")
+		highlight_current_mode()
 		cfg.set_visible(false)
 		cfg.open = false
 
@@ -5133,13 +5129,8 @@ function library:keybind(properties)
 	end)
 
 	press.MouseButton1Click:Connect(function()
-		if selected then
-			selected.BackgroundTransparency = 1
-		end
-		selected = press
-		press.BackgroundTransparency = 0
-
 		cfg.set_mode("toggle")
+		highlight_current_mode()
 		cfg.set_visible(false)
 		cfg.open = false
 
@@ -5151,13 +5142,8 @@ function library:keybind(properties)
 	end)
 
 	always.MouseButton1Click:Connect(function()
-		if selected then
-			selected.BackgroundTransparency = 1
-		end
-		selected = always
-
-		always.BackgroundTransparency = 0
 		cfg.set_mode("always")
+		highlight_current_mode()
 		cfg.set_visible(false)
 		cfg.open = false
 
@@ -5168,9 +5154,30 @@ function library:keybind(properties)
 		})
 	end)
 
+	-- Helper: highlight whichever mode button matches the current mode
+	local function highlight_current_mode()
+		press.BackgroundTransparency = 1
+		hold.BackgroundTransparency = 1
+		always.BackgroundTransparency = 1
+
+		if cfg.mode == "toggle" then
+			press.BackgroundTransparency = 0
+			selected = press
+		elseif cfg.mode == "hold" then
+			hold.BackgroundTransparency = 0
+			selected = hold
+		elseif cfg.mode == "always" then
+			always.BackgroundTransparency = 0
+			selected = always
+		end
+	end
+
+	-- Right-click opens the mode picker (press / hold / always)
 	keybind.MouseButton2Click:Connect(function()
 		cfg.open = not cfg.open
-
+		if cfg.open then
+			highlight_current_mode()
+		end
 		cfg.set_visible(cfg.open)
 	end)
 
@@ -5552,4 +5559,3 @@ function library:panel(properties)
 end
 
 return library
-

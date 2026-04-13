@@ -25349,6 +25349,85 @@ animSetNames = GetAnimationSetNames()
 	})
 
 	cske = false
+	SkyboxState = {
+		PresetName = nil,
+		Preset = nil,
+		LastCheck = 0,
+		Interval = 1.5,
+		Connection = nil,
+	}
+
+	local function ApplySkyboxPresetByName(name)
+		if not name or name == "" then
+			return
+		end
+		local preset = SkyboxPresets[name]
+		if not preset then
+			return
+		end
+		local sky = lighting:FindFirstChildOfClass("Sky")
+		if not sky then
+			sky = Instance.new("Sky")
+			sky.Parent = lighting
+		end
+		sky.SkyboxBk = preset.SkyboxBk or ""
+		sky.SkyboxDn = preset.SkyboxDn or ""
+		sky.SkyboxFt = preset.SkyboxFt or ""
+		sky.SkyboxLf = preset.SkyboxLf or ""
+		sky.SkyboxRt = preset.SkyboxRt or ""
+		sky.SkyboxUp = preset.SkyboxUp or ""
+		if preset.MoonTextureId then
+			sky.MoonTextureId = preset.MoonTextureId
+		end
+		if preset.SunTextureId then
+			sky.SunTextureId = preset.SunTextureId
+		end
+		SkyboxState.PresetName = name
+		SkyboxState.Preset = preset
+	end
+
+	local function IsSkyboxMatchingPreset(sky, preset)
+		if not sky or not preset then
+			return false
+		end
+		if sky.SkyboxBk ~= (preset.SkyboxBk or "") then return false end
+		if sky.SkyboxDn ~= (preset.SkyboxDn or "") then return false end
+		if sky.SkyboxFt ~= (preset.SkyboxFt or "") then return false end
+		if sky.SkyboxLf ~= (preset.SkyboxLf or "") then return false end
+		if sky.SkyboxRt ~= (preset.SkyboxRt or "") then return false end
+		if sky.SkyboxUp ~= (preset.SkyboxUp or "") then return false end
+		if preset.MoonTextureId and sky.MoonTextureId ~= preset.MoonTextureId then return false end
+		if preset.SunTextureId and sky.SunTextureId ~= preset.SunTextureId then return false end
+		return true
+	end
+
+	local function EnsureSkyboxApplied()
+		if not cske then
+			return
+		end
+		local name = SkyboxState.PresetName
+		if not name or name == "" then
+			return
+		end
+		local preset = SkyboxState.Preset or SkyboxPresets[name]
+		if not preset then
+			return
+		end
+		local sky = lighting:FindFirstChildOfClass("Sky")
+		if not sky or not IsSkyboxMatchingPreset(sky, preset) then
+			ApplySkyboxPresetByName(name)
+		end
+	end
+
+	if not SkyboxState.Connection then
+		SkyboxState.Connection = RunService.Heartbeat:Connect(function()
+			local now = os.clock()
+			if (now - (SkyboxState.LastCheck or 0)) >= (SkyboxState.Interval or 1.5) then
+				SkyboxState.LastCheck = now
+				EnsureSkyboxApplied()
+			end
+		end)
+	end
 
 	skysettings:toggle({
 		name = "sky",
@@ -25428,27 +25507,7 @@ animSetNames = GetAnimationSetNames()
 		default = "Default",
 		multi = false,
 		callback = function(value)
-			local sky = lighting:FindFirstChildOfClass("Sky")
-			if not sky then
-				sky = Instance.new("Sky")
-				sky.Parent = lighting
-			end
-			
-			local preset = SkyboxPresets[value]
-			if preset then
-				sky.SkyboxBk = preset.SkyboxBk
-				sky.SkyboxDn = preset.SkyboxDn
-				sky.SkyboxFt = preset.SkyboxFt
-				sky.SkyboxLf = preset.SkyboxLf
-				sky.SkyboxRt = preset.SkyboxRt
-				sky.SkyboxUp = preset.SkyboxUp
-				if preset.MoonTextureId then
-					sky.MoonTextureId = preset.MoonTextureId
-				end
-				if preset.SunTextureId then
-					sky.SunTextureId = preset.SunTextureId
-				end
-			end
+			ApplySkyboxPresetByName(value)
 			cske = true
 			if library.flags then
 				library.flags["sky_enabled"] = true
